@@ -1,6 +1,7 @@
 module argon2
 
-// Remove unused import
+import crypto.blake2b
+import math.bits
 
 // Core Argon2 implementation
 
@@ -24,80 +25,80 @@ mut:
 	typ            Argon2Type
 }
 
-// Generate initial hash H0 using streaming Blake2b (matches reference implementation)
+// Generate initial hash H0 using crypto.blake2b
 fn initial_hash(ctx &Argon2Context, typ Argon2Type) []u8 {
-	// Use streaming Blake2b exactly like the reference implementation
-	mut blake_state := blake2b_streaming_init(64)  // ARGON2_PREHASH_DIGEST_LENGTH = 64
-	
+	// Use crypto.blake2b exactly like the reference implementation
+	mut hasher := blake2b.new512() or { panic('Failed to create blake2b hasher') }
+
 	// Hash parameters in the exact order as reference implementation
-	blake2b_streaming_update(mut blake_state, u32_to_bytes_le(ctx.lanes))
-	blake2b_streaming_update(mut blake_state, u32_to_bytes_le(ctx.outlen))
-	blake2b_streaming_update(mut blake_state, u32_to_bytes_le(ctx.m_cost))
-	blake2b_streaming_update(mut blake_state, u32_to_bytes_le(ctx.t_cost))
-	blake2b_streaming_update(mut blake_state, u32_to_bytes_le(ctx.version))
-	blake2b_streaming_update(mut blake_state, u32_to_bytes_le(u32(typ)))
-	
+	hasher.write(u32_to_bytes_le(ctx.lanes)) or { panic('Failed to write to hasher') }
+	hasher.write(u32_to_bytes_le(ctx.outlen)) or { panic('Failed to write to hasher') }
+	hasher.write(u32_to_bytes_le(ctx.m_cost)) or { panic('Failed to write to hasher') }
+	hasher.write(u32_to_bytes_le(ctx.t_cost)) or { panic('Failed to write to hasher') }
+	hasher.write(u32_to_bytes_le(ctx.version)) or { panic('Failed to write to hasher') }
+	hasher.write(u32_to_bytes_le(u32(typ))) or { panic('Failed to write to hasher') }
+
 	// Password length then password
-	blake2b_streaming_update(mut blake_state, u32_to_bytes_le(ctx.pwdlen))
+	hasher.write(u32_to_bytes_le(ctx.pwdlen)) or { panic('Failed to write to hasher') }
 	if ctx.pwdlen > 0 {
-		blake2b_streaming_update(mut blake_state, ctx.pwd)
+		hasher.write(ctx.pwd) or { panic('Failed to write to hasher') }
 	}
-	
+
 	// Salt length then salt
-	blake2b_streaming_update(mut blake_state, u32_to_bytes_le(ctx.saltlen))
+	hasher.write(u32_to_bytes_le(ctx.saltlen)) or { panic('Failed to write to hasher') }
 	if ctx.saltlen > 0 {
-		blake2b_streaming_update(mut blake_state, ctx.salt)
+		hasher.write(ctx.salt) or { panic('Failed to write to hasher') }
 	}
-	
+
 	// Secret length then secret
-	blake2b_streaming_update(mut blake_state, u32_to_bytes_le(ctx.secretlen))
+	hasher.write(u32_to_bytes_le(ctx.secretlen)) or { panic('Failed to write to hasher') }
 	if ctx.secretlen > 0 {
-		blake2b_streaming_update(mut blake_state, ctx.secret)
+		hasher.write(ctx.secret) or { panic('Failed to write to hasher') }
 	}
-	
+
 	// Associated data length then data
-	blake2b_streaming_update(mut blake_state, u32_to_bytes_le(ctx.adlen))
+	hasher.write(u32_to_bytes_le(ctx.adlen)) or { panic('Failed to write to hasher') }
 	if ctx.adlen > 0 {
-		blake2b_streaming_update(mut blake_state, ctx.ad)
+		hasher.write(ctx.ad) or { panic('Failed to write to hasher') }
 	}
-	
-	return blake2b_streaming_final(mut blake_state)
+
+	return hasher.checksum()
 }
 
 // Initialize memory and first blocks
 fn initialize(mut instance Argon2Instance, ctx &Argon2Context) !int {
 	// Allocate memory blocks
 	instance.memory = []Block{len: int(instance.memory_blocks)}
-	
+
 	// Generate initial hash H0 using the proper method
 	h0 := initial_hash(ctx, instance.typ)
-	
+
 	// Create blockhash buffer like reference implementation
 	// ARGON2_PREHASH_SEED_LENGTH = 72 (64 for H0 + 8 for counter and lane)
 	mut blockhash := []u8{len: 72}
-	
+
 	// Copy H0 to first 64 bytes
 	for i in 0..64 {
 		blockhash[i] = h0[i]
 	}
-	
+
 	// Generate first blocks for each lane using exact reference method
 	for lane in 0..ctx.lanes {
 		// First block: store counter=0 and lane at offset 64
 		store32_le(mut blockhash, 64, 0)     // counter = 0
 		store32_le(mut blockhash, 68, lane)  // lane number
-		
-		block1_hash := blake2b_long(blockhash, 1024)
+
+		block1_hash := argon2_long_hash(blockhash, 1024)
 		bytes_to_block(block1_hash, mut instance.memory[lane * instance.lane_length])
-		
+
 		// Second block: store counter=1 and lane at offset 64
 		store32_le(mut blockhash, 64, 1)     // counter = 1
 		store32_le(mut blockhash, 68, lane)  // lane number
-		
-		block2_hash := blake2b_long(blockhash, 1024)
+
+		block2_hash := argon2_long_hash(blockhash, 1024)
 		bytes_to_block(block2_hash, mut instance.memory[lane * instance.lane_length + 1])
 	}
-	
+
 	return int(Argon2ErrorCode.ok)
 }
 
@@ -111,7 +112,7 @@ fn fill_memory_blocks(mut instance Argon2Instance) int {
 			}
 		}
 	}
-	
+
 	return int(Argon2ErrorCode.ok)
 }
 
@@ -120,19 +121,19 @@ fn fill_segment(mut instance Argon2Instance, pass u32, lane u32, slice u32) {
 	mut address_block := Block{}
 	mut input_block := Block{}
 	mut zero_block := Block{}
-	
+
 	mut prev_offset := u32(0)
 	mut curr_offset := u32(0)
 	mut starting_index := u32(0)
-	
+
 	// Determine if we use data-independent addressing
 	data_independent_addressing := (instance.typ == Argon2Type.argon2_i) ||
 		(instance.typ == Argon2Type.argon2_id && pass == 0 && slice < sync_points / 2)
-	
+
 	if data_independent_addressing {
 		init_block_value(mut zero_block, 0)
 		init_block_value(mut input_block, 0)
-		
+
 		input_block.v[0] = pass
 		input_block.v[1] = lane
 		input_block.v[2] = slice
@@ -140,21 +141,21 @@ fn fill_segment(mut instance Argon2Instance, pass u32, lane u32, slice u32) {
 		input_block.v[4] = instance.passes
 		input_block.v[5] = u64(instance.typ)
 	}
-	
+
 	starting_index = 0
-	
+
 	if pass == 0 && slice == 0 {
 		starting_index = 2  // we have already generated the first two blocks
-		
+
 		// Don't forget to generate the first block of addresses
 		if data_independent_addressing {
 			next_addresses(mut address_block, mut input_block, zero_block)
 		}
 	}
-	
+
 	// Offset of the current block
 	curr_offset = lane * instance.lane_length + slice * instance.segment_length + starting_index
-	
+
 	if curr_offset % instance.lane_length == 0 {
 		// Last block in this lane
 		prev_offset = curr_offset + instance.lane_length - 1
@@ -162,13 +163,13 @@ fn fill_segment(mut instance Argon2Instance, pass u32, lane u32, slice u32) {
 		// Previous block
 		prev_offset = curr_offset - 1
 	}
-	
+
 	for i in starting_index..instance.segment_length {
 		// 1.1 Rotating prev_offset if needed
 		if curr_offset % instance.lane_length == 1 {
 			prev_offset = curr_offset - 1
 		}
-		
+
 		// 1.2.1 Taking pseudo-random value from the previous block
 		mut pseudo_rand := u64(0)
 		if data_independent_addressing {
@@ -179,28 +180,28 @@ fn fill_segment(mut instance Argon2Instance, pass u32, lane u32, slice u32) {
 		} else {
 			pseudo_rand = instance.memory[prev_offset].v[0]
 		}
-		
+
 		// 1.2.2 Computing the lane of the reference block
 		mut ref_lane := u32((pseudo_rand >> 32) % u64(instance.lanes))
-		
+
 		if pass == 0 && slice == 0 {
 			// Can not reference other lanes yet
 			ref_lane = lane
 		}
-		
+
 		// 1.2.3 Computing the reference block index within the lane
 		ref_index := index_alpha(instance, pass, slice, ref_lane, i, u32(pseudo_rand & 0xFFFFFFFF), ref_lane == lane)
-		
+
 		// 2 Creating a new block
 		ref_block_offset := instance.lane_length * ref_lane + ref_index
 		curr_block_offset := curr_offset
-		
+
 		if pass == 0 {
 			fill_block(instance.memory[prev_offset], instance.memory[ref_block_offset], mut instance.memory[curr_block_offset], false)
 		} else {
 			fill_block(instance.memory[prev_offset], instance.memory[ref_block_offset], mut instance.memory[curr_block_offset], true)
 		}
-		
+
 		curr_offset++
 		prev_offset++
 	}
@@ -210,7 +211,7 @@ fn fill_segment(mut instance Argon2Instance, pass u32, lane u32, slice u32) {
 fn index_alpha(instance &Argon2Instance, pass u32, slice u32, lane u32, index u32, pseudo_rand u32, same_lane bool) u32 {
 	// Calculate reference area size exactly as in reference implementation
 	mut reference_area_size := u32(0)
-	
+
 	if pass == 0 {
 		// First pass
 		if slice == 0 {
@@ -234,13 +235,13 @@ fn index_alpha(instance &Argon2Instance, pass u32, slice u32, lane u32, index u3
 				if index == 0 { u32(-1) } else { 0 }
 		}
 	}
-	
+
 	// Mapping pseudo_rand to 0..<reference_area_size-1> and produce relative position
 	mut relative_position := u64(pseudo_rand)
 	relative_position = relative_position * relative_position >> 32
 	relative_position = u64(reference_area_size - 1) - 
 		(u64(reference_area_size) * relative_position >> 32)
-	
+
 	// Computing starting position
 	mut start_position := u32(0)
 	if pass != 0 {
@@ -250,7 +251,7 @@ fn index_alpha(instance &Argon2Instance, pass u32, slice u32, lane u32, index u3
 			(slice + 1) * instance.segment_length
 		}
 	}
-	
+
 	// Computing absolute position
 	absolute_position := (start_position + u32(relative_position)) % instance.lane_length
 	return absolute_position
@@ -267,13 +268,13 @@ fn f_bla_mka(x u64, y u64) u64 {
 // G function - quarter round for Argon2 compression
 fn argon2_g(a u64, b u64, c u64, d u64) (u64, u64, u64, u64) {
 	mut a_new := f_bla_mka(a, b)
-	mut d_new := rotr64(d ^ a_new, 32)
+	mut d_new := bits.rotate_left_64(d ^ a_new, 64 - 32)
 	mut c_new := f_bla_mka(c, d_new)
-	mut b_new := rotr64(b ^ c_new, 24)
+	mut b_new := bits.rotate_left_64(b ^ c_new, 64 - 24)
 	a_new = f_bla_mka(a_new, b_new)
-	d_new = rotr64(d_new ^ a_new, 16)
+	d_new = bits.rotate_left_64(d_new ^ a_new, 64 - 16)
 	c_new = f_bla_mka(c_new, d_new)
-	b_new = rotr64(b_new ^ c_new, 63)
+	b_new = bits.rotate_left_64(b_new ^ c_new, 64 - 63)
 	return a_new, b_new, c_new, d_new
 }
 
@@ -284,7 +285,7 @@ fn blake2_round_nomsg(mut v [16]u64) {
 	v[1], v[5], v[9], v[13] = argon2_g(v[1], v[5], v[9], v[13])
 	v[2], v[6], v[10], v[14] = argon2_g(v[2], v[6], v[10], v[14])
 	v[3], v[7], v[11], v[15] = argon2_g(v[3], v[7], v[11], v[15])
-	
+
 	// Diagonal mixing
 	v[0], v[5], v[10], v[15] = argon2_g(v[0], v[5], v[10], v[15])
 	v[1], v[6], v[11], v[12] = argon2_g(v[1], v[6], v[11], v[12])
@@ -297,43 +298,43 @@ fn fill_block(prev Block, ref Block, mut curr Block, with_xor bool) {
 	// Create blockR = ref XOR prev
 	mut block_r := Block{}
 	mut block_tmp := Block{}
-	
+
 	// blockR = ref_block XOR prev_block
 	for i in 0..128 {
 		block_r.v[i] = ref.v[i] ^ prev.v[i]
 		block_tmp.v[i] = block_r.v[i]  // Copy for later
 	}
-	
+
 	// If with_xor, XOR with current block content
 	if with_xor {
 		for i in 0..128 {
 			block_tmp.v[i] ^= curr.v[i]
 		}
 	}
-	
+
 	// Apply Blake2 rounds on columns (8 rounds of 16 elements each)
 	for i in 0..8 {
 		mut v := [16]u64{}
 		start_idx := 16 * i
-		
+
 		// Load 16 consecutive elements
 		for j in 0..16 {
 			v[j] = block_r.v[start_idx + j]
 		}
-		
+
 		// Apply Blake2 round
 		blake2_round_nomsg(mut v)
-		
+
 		// Store back
 		for j in 0..16 {
 			block_r.v[start_idx + j] = v[j]
 		}
 	}
-	
+
 	// Apply Blake2 rounds on rows (8 rounds with specific pattern)
 	for i in 0..8 {
 		mut v := [16]u64{}
-		
+
 		// Load elements with row pattern: (0,1,16,17,...112,113), etc.
 		v[0] = block_r.v[2 * i]
 		v[1] = block_r.v[2 * i + 1]
@@ -351,10 +352,10 @@ fn fill_block(prev Block, ref Block, mut curr Block, with_xor bool) {
 		v[13] = block_r.v[2 * i + 97]
 		v[14] = block_r.v[2 * i + 112]
 		v[15] = block_r.v[2 * i + 113]
-		
+
 		// Apply Blake2 round
 		blake2_round_nomsg(mut v)
-		
+
 		// Store back with row pattern
 		block_r.v[2 * i] = v[0]
 		block_r.v[2 * i + 1] = v[1]
@@ -373,7 +374,7 @@ fn fill_block(prev Block, ref Block, mut curr Block, with_xor bool) {
 		block_r.v[2 * i + 112] = v[14]
 		block_r.v[2 * i + 113] = v[15]
 	}
-	
+
 	// Final step: copy block_tmp to curr, then XOR with blockR (matches reference)
 	for i in 0..128 {
 		curr.v[i] = block_tmp.v[i]
@@ -387,19 +388,19 @@ fn fill_block(prev Block, ref Block, mut curr Block, with_xor bool) {
 fn finalize(mut ctx Argon2Context, instance &Argon2Instance) {
 	// XOR last blocks of all lanes
 	mut final_block := Block{}
-	
+
 	for lane in 0..ctx.lanes {
 		last_block_pos := (lane + 1) * instance.lane_length - 1
 		for i in 0..128 {
 			final_block.v[i] ^= instance.memory[last_block_pos].v[i]
 		}
 	}
-	
+
 	// Extract output hash
 	block_bytes := block_to_bytes(final_block)
-	
-	final_hash := blake2b_long(block_bytes, int(ctx.outlen))
-	
+
+	final_hash := argon2_long_hash(block_bytes, int(ctx.outlen))
+
 	// Copy to output
 	for i in 0..ctx.outlen {
 		ctx.out[i] = final_hash[i]
@@ -412,7 +413,7 @@ fn finalize(mut ctx Argon2Context, instance &Argon2Instance) {
 fn init_block_value(mut block Block, val u8) {
 	fill_val := u64(val) | (u64(val) << 8) | (u64(val) << 16) | (u64(val) << 24) |
 		(u64(val) << 32) | (u64(val) << 40) | (u64(val) << 48) | (u64(val) << 56)
-	
+
 	for i in 0..128 {
 		block.v[i] = fill_val
 	}
@@ -424,6 +425,78 @@ fn next_addresses(mut address_block Block, mut input_block Block, zero_block Blo
 	fill_block(zero_block, input_block, mut address_block, false)
 	fill_block(zero_block, address_block, mut address_block, false)
 }
+
+// Argon2-specific variable-length hash function using Blake2b
+// Implements the H' function from RFC 9106 Section 3.1.
+// This is NOT a general Blake2b extension, but an Argon2-specific algorithm
+// that uses Blake2b as a building block for generating arbitrary-length outputs.
+// Input is prefixed with output length as little-endian u32 per Argon2 spec.
+fn argon2_long_hash(input []u8, outlen int) []u8 {
+	// Prepend output length as little-endian u32 (like reference implementation)
+	outlen_bytes := [
+		u8(outlen & 0xFF),
+		u8((outlen >> 8) & 0xFF),
+		u8((outlen >> 16) & 0xFF),
+		u8((outlen >> 24) & 0xFF)
+	]
+
+	mut full_input := outlen_bytes.clone()
+	full_input << input
+
+	if outlen <= 64 {
+		// Simple case: use new_digest for custom output length
+		if outlen == 64 {
+			return blake2b.sum512(full_input)
+		} else {
+			mut hasher := blake2b.new_digest(u8(outlen), []) or { panic('Failed to create blake2b hasher') }
+			hasher.write(full_input) or { panic('Failed to write to hasher') }
+			return hasher.checksum()
+		}
+	}
+
+	// For longer outputs, implement the extension mechanism like the reference
+	mut out := []u8{len: outlen}
+	mut toproduce := outlen
+
+	// First, hash to get initial output
+	out_buffer := blake2b.sum512(full_input)
+
+	// Copy first half to output
+	copy_len := 64 / 2
+	for i in 0..copy_len {
+		out[i] = out_buffer[i]
+	}
+
+	mut offset := copy_len
+	toproduce -= copy_len
+	mut in_buffer := out_buffer.clone()
+
+	// Generate additional output by iterative hashing
+	for toproduce > 64 {
+		out_buffer2 := blake2b.sum512(in_buffer)
+
+		// Copy half of the output
+		for i in 0..64/2 {
+			out[offset + i] = out_buffer2[i]
+		}
+		offset += 64 / 2
+		toproduce -= 64 / 2
+		in_buffer = out_buffer2.clone()
+	}
+
+	// Final iteration
+	if toproduce > 0 {
+		mut final_hasher := blake2b.new_digest(u8(toproduce), []) or { panic('Failed to create blake2b hasher') }
+		final_hasher.write(in_buffer) or { panic('Failed to write to hasher') }
+		final_output := final_hasher.checksum()
+		for i in 0..toproduce {
+			out[offset + i] = final_output[i]
+		}
+	}
+
+	return out
+}
+
 
 // Utility functions
 
@@ -473,7 +546,7 @@ fn bytes_to_block(bytes []u8, mut block Block) {
 // Convert block to bytes
 fn block_to_bytes(block Block) []u8 {
 	mut result := []u8{len: 1024}
-	
+
 	for i in 0..128 {
 		offset := i * 8
 		val := block.v[i]
@@ -486,6 +559,6 @@ fn block_to_bytes(block Block) []u8 {
 		result[offset + 6] = u8((val >> 48) & 0xFF)
 		result[offset + 7] = u8((val >> 56) & 0xFF)
 	}
-	
+
 	return result
 }
