@@ -9,28 +9,19 @@ fn test_argon2id_basic_hash() {
 	salt := 'somesalt'.bytes()
 	
 	// Test that the function runs without error
-	result := hash_id_raw(2, 65536, 1, password, salt, 32) or {
-		assert false, 'hash_id_raw should not fail: ${err}'
-		return
-	}
+	result := hash_id_raw(2, 65536, 1, password, salt, 32) or { panic(err) }
 	
 	// Basic validation tests
 	assert result.len == 32, 'Hash length should be 32 bytes'
 	
 	// Test deterministic output (same input should give same output)
-	result2 := hash_id_raw(2, 65536, 1, password, salt, 32) or {
-		assert false, 'Second call should not fail'
-		return
-	}
+	result2 := hash_id_raw(2, 65536, 1, password, salt, 32) or { panic(err) }
 	
 	assert result == result2, 'Argon2 should be deterministic'
 	
 	// Test different inputs give different outputs
 	different_password := 'different'.bytes()
-	result3 := hash_id_raw(2, 65536, 1, different_password, salt, 32) or {
-		assert false, 'Different password call should not fail'
-		return
-	}
+	result3 := hash_id_raw(2, 65536, 1, different_password, salt, 32) or { panic(err) }
 	
 	assert result != result3, 'Different passwords should give different hashes'
 }
@@ -41,10 +32,7 @@ fn test_argon2id_encoded_hash() {
 	salt := 'somesalt'.bytes()
 	
 	// Test encoded hash function
-	encoded := hash_id(2, 65536, 1, password, salt, 32) or {
-		assert false, 'hash_id should not fail: ${err}'
-		return
-	}
+	encoded := hash_id(2, 65536, 1, password, salt, 32) or { panic(err) }
 	
 	// Should start with $argon2id$v=19$
 	assert encoded.starts_with('\$argon2id\$v=19\$'), 'Encoded hash should have correct format'
@@ -119,26 +107,17 @@ fn test_hash_i_raw() {
 	salt := 'somesalt'.bytes()
 	
 	// This should fail initially as hash_i_raw doesn't exist yet
-	result := hash_i_raw(2, 1024, 1, password, salt, 32) or {
-		assert false, 'hash_i_raw should exist and work: ${err}'
-		return
-	}
+	result := hash_i_raw(2, 1024, 1, password, salt, 32) or { panic(err) }
 	
 	// Basic validation
 	assert result.len == 32, 'Argon2i hash should be 32 bytes'
 	
 	// Test deterministic behavior
-	result2 := hash_i_raw(2, 1024, 1, password, salt, 32) or {
-		assert false, 'Second Argon2i call should work'
-		return
-	}
+	result2 := hash_i_raw(2, 1024, 1, password, salt, 32) or { panic(err) }
 	assert result == result2, 'Argon2i should be deterministic'
 	
 	// Test that Argon2i produces different result than Argon2id
-	result_id := hash_id_raw(2, 1024, 1, password, salt, 32) or {
-		assert false, 'Argon2id comparison should work'
-		return
-	}
+	result_id := hash_id_raw(2, 1024, 1, password, salt, 32) or { panic(err) }
 	assert result != result_id, 'Argon2i should produce different hash than Argon2id'
 }
 
@@ -148,10 +127,7 @@ fn test_hash_i() {
 	salt := 'somesalt'.bytes()
 	
 	// This should fail initially as hash_i doesn't exist yet
-	encoded := hash_i(2, 1024, 1, password, salt, 32) or {
-		assert false, 'hash_i should exist and work: ${err}'
-		return
-	}
+	encoded := hash_i(2, 1024, 1, password, salt, 32) or { panic(err) }
 	
 	// Test PHC format
 	assert encoded.starts_with('\$argon2i\$v=19\$'), 'Should have correct Argon2i prefix'
@@ -167,30 +143,18 @@ fn test_hash_d_raw() {
 	salt := 'somesalt'.bytes()
 	
 	// This should fail initially as hash_d_raw doesn't exist yet
-	result := hash_d_raw(2, 1024, 1, password, salt, 32) or {
-		assert false, 'hash_d_raw should exist and work: ${err}'
-		return
-	}
+	result := hash_d_raw(2, 1024, 1, password, salt, 32) or { panic(err) }
 	
 	// Basic validation
 	assert result.len == 32, 'Argon2d hash should be 32 bytes'
 	
 	// Test deterministic behavior
-	result2 := hash_d_raw(2, 1024, 1, password, salt, 32) or {
-		assert false, 'Second Argon2d call should work'
-		return
-	}
+	result2 := hash_d_raw(2, 1024, 1, password, salt, 32) or { panic(err) }
 	assert result == result2, 'Argon2d should be deterministic'
 	
 	// Test that Argon2d produces different results than other variants
-	result_i := hash_i_raw(2, 1024, 1, password, salt, 32) or {
-		assert false, 'Argon2i comparison should work'
-		return
-	}
-	result_id := hash_id_raw(2, 1024, 1, password, salt, 32) or {
-		assert false, 'Argon2id comparison should work'
-		return
-	}
+	result_i := hash_i_raw(2, 1024, 1, password, salt, 32) or { panic(err) }
+	result_id := hash_id_raw(2, 1024, 1, password, salt, 32) or { panic(err) }
 	
 	assert result != result_i, 'Argon2d should produce different hash than Argon2i'
 	assert result != result_id, 'Argon2d should produce different hash than Argon2id'
@@ -202,10 +166,7 @@ fn test_hash_d() {
 	salt := 'somesalt'.bytes()
 	
 	// This should fail initially as hash_d doesn't exist yet
-	encoded := hash_d(2, 1024, 1, password, salt, 32) or {
-		assert false, 'hash_d should exist and work: ${err}'
-		return
-	}
+	encoded := hash_d(2, 1024, 1, password, salt, 32) or { panic(err) }
 	
 	// Test PHC format
 	assert encoded.starts_with('\$argon2d\$v=19\$'), 'Should have correct Argon2d prefix'
@@ -221,28 +182,18 @@ fn test_verify_i() {
 	salt := 'somesalt'.bytes()
 	
 	// Generate an encoded hash first
-	encoded := hash_i(2, 1024, 1, password, salt, 32) or {
-		assert false, 'Failed to generate encoded hash for verification test'
-		return
-	}
+	encoded := hash_i(2, 1024, 1, password, salt, 32) or { panic(err) }
 	
 	// Verify with correct password - should succeed
-	result := verify_i(encoded, password) or {
-		assert false, 'verify_i should exist and work with correct password: ${err}'
-		return
-	}
+	result := verify_i(encoded, password) or { panic(err) }
 	
-	assert result == int(Argon2ErrorCode.ok), 'Verification should succeed with correct password'
+	assert result == true, 'Verification should succeed with correct password'
 	
 	// Verify with wrong password - should fail
 	wrong_password := 'wrongpassword'.bytes()
-	result2 := verify_i(encoded, wrong_password) or {
-		// This is expected to fail, but the function should exist
-		assert err.msg().contains('mismatch') || err.msg().contains('verify'), 'Should fail with verification error'
-		return
-	}
+	result2 := verify_i(encoded, wrong_password) or { panic(err) }
 	
-	assert result2 != int(Argon2ErrorCode.ok), 'Verification should fail with wrong password'
+	assert result2 == false, 'Verification should fail with wrong password'
 }
 
 fn test_verify_d() {
@@ -251,28 +202,18 @@ fn test_verify_d() {
 	salt := 'somesalt'.bytes()
 	
 	// Generate an encoded hash first
-	encoded := hash_d(2, 1024, 1, password, salt, 32) or {
-		assert false, 'Failed to generate encoded hash for verification test'
-		return
-	}
+	encoded := hash_d(2, 1024, 1, password, salt, 32) or { panic(err) }
 	
 	// Verify with correct password - should succeed
-	result := verify_d(encoded, password) or {
-		assert false, 'verify_d should exist and work with correct password: ${err}'
-		return
-	}
+	result := verify_d(encoded, password) or { panic(err) }
 	
-	assert result == int(Argon2ErrorCode.ok), 'Verification should succeed with correct password'
+	assert result == true, 'Verification should succeed with correct password'
 	
 	// Verify with wrong password - should fail
 	wrong_password := 'wrongpassword'.bytes()
-	result2 := verify_d(encoded, wrong_password) or {
-		// This is expected to fail, but the function should exist
-		assert err.msg().contains('mismatch') || err.msg().contains('verify'), 'Should fail with verification error'
-		return
-	}
+	result2 := verify_d(encoded, wrong_password) or { panic(err) }
 	
-	assert result2 != int(Argon2ErrorCode.ok), 'Verification should fail with wrong password'
+	assert result2 == false, 'Verification should fail with wrong password'
 }
 
 fn test_verify_id() {
@@ -281,28 +222,18 @@ fn test_verify_id() {
 	salt := 'somesalt'.bytes()
 	
 	// Generate an encoded hash first
-	encoded := hash_id(2, 1024, 1, password, salt, 32) or {
-		assert false, 'Failed to generate encoded hash for verification test'
-		return
-	}
+	encoded := hash_id(2, 1024, 1, password, salt, 32) or { panic(err) }
 	
 	// Verify with correct password - should succeed
-	result := verify_id(encoded, password) or {
-		assert false, 'verify_id should exist and work with correct password: ${err}'
-		return
-	}
+	result := verify_id(encoded, password) or { panic(err) }
 	
-	assert result == int(Argon2ErrorCode.ok), 'Verification should succeed with correct password'
+	assert result == true, 'Verification should succeed with correct password'
 	
 	// Verify with wrong password - should fail
 	wrong_password := 'wrongpassword'.bytes()
-	result2 := verify_id(encoded, wrong_password) or {
-		// This is expected to fail, but the function should exist
-		assert err.msg().contains('mismatch') || err.msg().contains('verify'), 'Should fail with verification error'
-		return
-	}
+	result2 := verify_id(encoded, wrong_password) or { panic(err) }
 	
-	assert result2 != int(Argon2ErrorCode.ok), 'Verification should fail with wrong password'
+	assert result2 == false, 'Verification should fail with wrong password'
 }
 
 fn test_generic_argon2_verify() {
@@ -311,17 +242,11 @@ fn test_generic_argon2_verify() {
 	salt := 'somesalt'.bytes()
 	
 	// Test with Argon2id
-	encoded_id := hash_id(2, 1024, 1, password, salt, 32) or {
-		assert false, 'Failed to generate Argon2id hash'
-		return
-	}
+	encoded_id := hash_id(2, 1024, 1, password, salt, 32) or { panic(err) }
 	
-	result := argon2_verify(encoded_id, password, Argon2Type.argon2_id) or {
-		assert false, 'argon2_verify should exist and work: ${err}'
-		return
-	}
+	result := argon2_verify(encoded_id, password, Argon2Type.argon2_id) or { panic(err) }
 	
-	assert result == int(Argon2ErrorCode.ok), 'Generic verify should work with Argon2id'
+	assert result == true, 'Generic verify should work with Argon2id'
 	
 	// Test with wrong variant type - should fail
 	result2 := argon2_verify(encoded_id, password, Argon2Type.argon2_i) or {
@@ -330,7 +255,7 @@ fn test_generic_argon2_verify() {
 		return
 	}
 	
-	assert result2 != int(Argon2ErrorCode.ok), 'Verification should fail with wrong variant type'
+	assert result2 == false, 'Verification should fail with wrong variant type'
 }
 
 // Test default hash function with secure defaults
@@ -339,10 +264,7 @@ fn test_default_hash_with_secure_defaults() {
 	salt := 'random_salt_16_b'.bytes() // 16 bytes for default security
 	
 	// Test default hash function
-	encoded := hash(password, salt) or {
-		assert false, 'Default hash should work: ${err}'
-		return
-	}
+	encoded := hash(password, salt) or { panic(err) }
 	
 	// Should have correct prefix for argon2id
 	assert encoded.starts_with('\$argon2id\$v=19\$'), 'Should be argon2id with correct version'
@@ -358,10 +280,7 @@ fn test_hash_with_params_custom_settings() {
 	salt := 'test_salt_123'.bytes()
 	
 	// Test hash_with_params function
-	encoded := hash_with_params(2, 1024, 1, password, salt, 32) or {
-		assert false, 'hash_with_params should work: ${err}'
-		return
-	}
+	encoded := hash_with_params(2, 1024, 1, password, salt, 32) or { panic(err) }
 	
 	// Should have correct parameters
 	assert encoded.contains('m=1024'), 'Should use specified memory cost'

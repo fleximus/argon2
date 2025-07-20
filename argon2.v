@@ -245,7 +245,7 @@ pub fn verify(encoded string, password []u8) !bool {
 		.argon2_id { verify_id(encoded, password)! }
 	}
 	
-	return result == int(Argon2ErrorCode.ok)
+	return result
 }
 
 // Parameter validation function
@@ -325,7 +325,7 @@ pub fn error_message(code Argon2ErrorCode) string {
 }
 
 // Main Argon2 context function
-pub fn argon2_ctx(mut ctx Argon2Context, typ Argon2Type) !int {
+fn argon2_ctx(mut ctx Argon2Context, typ Argon2Type) !bool {
 	// Validate context
 	if ctx.outlen < min_outlen || ctx.outlen > max_outlen {
 		return error('Invalid output length')
@@ -367,7 +367,7 @@ pub fn argon2_ctx(mut ctx Argon2Context, typ Argon2Type) !int {
 	// Finalize
 	finalize(mut ctx, instance)
 	
-	return int(Argon2ErrorCode.ok)
+	return true
 }
 
 
@@ -388,22 +388,22 @@ pub fn type_to_string(typ Argon2Type, uppercase bool) string {
 // Verification functions for password hashes
 
 // Verify password against Argon2i encoded hash
-pub fn verify_i(encoded string, pwd []u8) !int {
-	return argon2_verify(encoded, pwd, Argon2Type.argon2_i)
+pub fn verify_i(encoded string, pwd []u8) !bool {
+	return argon2_verify(encoded, pwd, Argon2Type.argon2_i)!
 }
 
 // Verify password against Argon2d encoded hash
-pub fn verify_d(encoded string, pwd []u8) !int {
-	return argon2_verify(encoded, pwd, Argon2Type.argon2_d)
+pub fn verify_d(encoded string, pwd []u8) !bool {
+	return argon2_verify(encoded, pwd, Argon2Type.argon2_d)!
 }
 
 // Verify password against Argon2id encoded hash
-pub fn verify_id(encoded string, pwd []u8) !int {
-	return argon2_verify(encoded, pwd, Argon2Type.argon2_id)
+pub fn verify_id(encoded string, pwd []u8) !bool {
+	return argon2_verify(encoded, pwd, Argon2Type.argon2_id)!
 }
 
 // Generic verification function
-pub fn argon2_verify(encoded string, pwd []u8, expected_type Argon2Type) !int {
+pub fn argon2_verify(encoded string, pwd []u8, expected_type Argon2Type) !bool {
 	// Parse the PHC string to extract parameters
 	params := parse_phc_string(encoded)!
 	
@@ -425,13 +425,8 @@ pub fn argon2_verify(encoded string, pwd []u8, expected_type Argon2Type) !int {
 		}
 	}
 	
-	
-	// Compare hashes
-	if computed_hash == params.hash {
-		return int(Argon2ErrorCode.ok)
-	} else {
-		return int(Argon2ErrorCode.verify_mismatch)
-	}
+	// Compare hashes and return boolean result
+	return computed_hash == params.hash
 }
 
 // Structure to hold parsed PHC parameters

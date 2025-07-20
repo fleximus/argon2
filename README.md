@@ -62,7 +62,7 @@ import fleximus.argon2
 // Hash with secure defaults: Argon2id, t=3, m=64MB, p=4, 128-bit salt, 256-bit output
 // The default hash function uses Argon2id for maximum security
 password := 'mypassword'.bytes()
-salt := 'mysalt123456789'.bytes() // min 8 bytes
+salt := 'mysalt1234567890'.bytes() // 16 bytes for default security
 hash := argon2.hash(password, salt) or { panic(err) }
 ```
 
@@ -118,9 +118,8 @@ hash_raw := argon2.hash_id_raw(3, // t_cost: Time cost (iterations)
  32 // hash_len: Output hash length
  ) or { panic(err) }
 
-// Verify password against encoded hash
-encoded := r'$argon2id$v=19$m=65536,t=3,p=1$...'
-result := argon2.verify_id(encoded, password) or { panic(err) }
+// Verify password against the generated hash
+is_valid := argon2.verify_id(hash, password) or { panic(err) }
 ```
 
 #### Argon2i (Data-Independent)
@@ -130,10 +129,13 @@ import fleximus.argon2
 // For side-channel resistant environments
 password := 'mypassword'.bytes()
 salt := 'mysalt123456789'.bytes()
-encoded := r'$argon2i$v=19$m=65536,t=3,p=1$...'
+
+// Generate hash first
 hash := argon2.hash_i(3, 65536, 1, password, salt, 32) or { panic(err) }
 hash_raw := argon2.hash_i_raw(3, 65536, 1, password, salt, 32) or { panic(err) }
-result := argon2.verify_i(encoded, password) or { panic(err) }
+
+// Verify password against the generated hash
+is_valid := argon2.verify_i(hash, password) or { panic(err) }
 ```
 
 #### Argon2d (Data-Dependent)  
@@ -143,10 +145,13 @@ import fleximus.argon2
 // For maximum resistance against GPU attacks
 password := 'mypassword'.bytes()
 salt := 'mysalt123456789'.bytes()
-encoded := r'$argon2d$v=19$m=65536,t=3,p=1$...'
+
+// Generate hash first
 hash := argon2.hash_d(3, 65536, 1, password, salt, 32) or { panic(err) }
 hash_raw := argon2.hash_d_raw(3, 65536, 1, password, salt, 32) or { panic(err) }
-result := argon2.verify_d(encoded, password) or { panic(err) }
+
+// Verify password against the generated hash
+is_valid := argon2.verify_d(hash, password) or { panic(err) }
 ```
 
 ### Parameter Guidelines
@@ -238,17 +243,31 @@ import fleximus.argon2
 
 fn compare_variants() {
 	password := 'test_password'.bytes()
-	salt := 'test_salt_12345'.bytes()
+	salt := 'random_salt_16_b'.bytes() // Exactly 16 bytes
 
-	// Argon2i: Resistant to side-channel attacks
-	hash_i := argon2.hash_i_raw(2, 65536, 1, password, salt, 32) or { panic(err) }
+	println('Comparing Argon2 variants...')
 
-	// Argon2d: Maximum resistance to GPU attacks
-	hash_d := argon2.hash_d_raw(2, 65536, 1, password, salt, 32) or { panic(err) }
+	// Test each variant individually with error handling
+	println('Testing Argon2i...')
+	hash_i := argon2.hash_i_raw(2, 65536, 1, password, salt, 32) or {
+		eprintln('Argon2i failed: ${err}')
+		return
+	}
 
-	// Argon2id: Hybrid approach (recommended)
-	hash_id := argon2.hash_id_raw(2, 65536, 1, password, salt, 32) or { panic(err) }
+	println('Testing Argon2d...')
+	hash_d := argon2.hash_d_raw(2, 65536, 1, password, salt, 32) or {
+		eprintln('Argon2d failed: ${err}')
+		return
+	}
 
+	println('Testing Argon2id...')
+	hash_id := argon2.hash_id_raw(2, 65536, 1, password, salt, 32) or {
+		eprintln('Argon2id failed: ${err}')
+		return
+	}
+
+	// Display results
+	println('Results:')
 	println('Argon2i:  ${hash_i.hex()}')
 	println('Argon2d:  ${hash_d.hex()}')
 	println('Argon2id: ${hash_id.hex()}')
