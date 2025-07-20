@@ -313,10 +313,10 @@ fn test_phc_string_vectors() {
 	
 	// Test verification of correct passwords
 	verify_result_i := verify_i(encoded_i, 'password'.bytes()) or { panic(err) }
-	assert verify_result_i == int(Argon2ErrorCode.ok), 'Argon2i verification should succeed'
+	assert verify_result_i == true, 'Argon2i verification should succeed'
 	
 	verify_result_id := verify_id(encoded_id, 'password'.bytes()) or { panic(err) }
-	assert verify_result_id == int(Argon2ErrorCode.ok), 'Argon2id verification should succeed'
+	assert verify_result_id == true, 'Argon2id verification should succeed'
 	
 }
 
@@ -370,10 +370,10 @@ fn test_argon2d_basic_functionality() {
 	
 	// Test verification
 	verify_result := verify_d(encoded, 'password'.bytes()) or { panic(err) }
-	assert verify_result == int(Argon2ErrorCode.ok), 'Argon2d verification should succeed'
+	assert verify_result == true, 'Argon2d verification should succeed'
 	
 	// Test wrong password verification
 	wrong_verify := verify_d(encoded, 'wrongpassword'.bytes()) or { panic(err) }
-	assert wrong_verify != int(Argon2ErrorCode.ok), 'Argon2d wrong password should fail'
+	assert wrong_verify == false, 'Argon2d wrong password should fail'
 	
 }
